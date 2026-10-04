@@ -11,7 +11,7 @@ class DepthEstimator:
     """
     Depth estimation using Depth Anything v2
     """
-    def __init__(self, model_size='small', device=None, metric=True, scene='indoor'):
+    def __init__(self, model_size='small', device=None, metric=True, scene='indoor', half=False):
         """
         Initialize the depth estimator
 
@@ -35,6 +35,8 @@ class DepthEstimator:
                 device = 'cpu'
         
         self.device = device
+        self.half = half and self.device == 'cuda'
+        dtype = torch.float16 if self.half else None
         
         # Set MPS fallback for operations not supported on Apple Silicon
         if self.device == 'mps':
@@ -66,7 +68,10 @@ class DepthEstimator:
         
         # Create pipeline
         try:
-            self.pipe = pipeline(task="depth-estimation", model=model_name, device=self.pipe_device)
+            pipe_kwargs = {"task": "depth-estimation", "model": model_name, "device": self.pipe_device}
+            if dtype is not None:
+                pipe_kwargs["torch_dtype"] = dtype
+            self.pipe = pipeline(**pipe_kwargs)
             print(f"Loaded Depth Anything v2 {model_size} model on {self.pipe_device}")
         except Exception as e:
             # Fallback to CPU if there are issues

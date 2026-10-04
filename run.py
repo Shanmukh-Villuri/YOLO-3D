@@ -44,7 +44,8 @@ def main():
     depth_scene = "outdoor"  # "indoor" or "outdoor" — match your scene
     
     # Device settings
-    device = 'cuda'  
+    device = 'cuda'
+    use_half = os.environ.get('YOLO3D_HALF', '0') == '1'  # FP16: slower here (tracker overhead), keep off
     
     # Detection settings
     conf_threshold = 0.25  # Confidence threshold for object detection
@@ -72,7 +73,8 @@ def main():
             conf_thres=conf_threshold,
             iou_thres=iou_threshold,
             classes=classes,
-            device=device
+            device=device,
+            half=use_half
         )
     except Exception as e:
         print(f"Error initializing object detector: {e}")
@@ -82,7 +84,8 @@ def main():
             conf_thres=conf_threshold,
             iou_thres=iou_threshold,
             classes=classes,
-            device='cpu'
+            device='cpu',
+            half=False
         )
     
     try:
@@ -90,7 +93,8 @@ def main():
             model_size=depth_model_size,
             device=device,
             metric=depth_metric,
-            scene=depth_scene
+            scene=depth_scene,
+            half=use_half
         )
     except Exception as e:
         print(f"Error initializing depth estimator: {e}")
@@ -99,7 +103,8 @@ def main():
             model_size=depth_model_size,
             device='cpu',
             metric=depth_metric,
-            scene=depth_scene
+            scene=depth_scene,
+            half=False
         )    
     # Initialize 3D bounding box estimator with default parameters
     # Simplified approach - focus on 2D detection with depth information

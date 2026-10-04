@@ -9,7 +9,7 @@ class ObjectDetector:
     """
     Object detection using YOLOv11 from Ultralytics
     """
-    def __init__(self, model_size='small', conf_thres=0.25, iou_thres=0.45, classes=None, device=None):
+    def __init__(self, model_size='small', conf_thres=0.25, iou_thres=0.45, classes=None, device=None, half=False):
         """
         Initialize the object detector
         
@@ -30,6 +30,7 @@ class ObjectDetector:
                 device = 'cpu'
         
         self.device = device
+        self.half = half and device == 'cuda'
         
         # Set MPS fallback for operations not supported on Apple Silicon
         if self.device == 'mps':
@@ -91,19 +92,19 @@ class ObjectDetector:
         try:
             if track:
                 # Run inference with tracking
-                results = self.model.track(image, verbose=False, device=self.device, persist=True)
+                results = self.model.track(image, verbose=False, device=self.device, persist=True, half=self.half)
             else:
                 # Run inference without tracking
-                results = self.model.predict(image, verbose=False, device=self.device)
+                results = self.model.predict(image, verbose=False, device=self.device, half=self.half)
         except RuntimeError as e:
             # Handle potential MPS errors
             if self.device == 'mps' and "not currently implemented for the MPS device" in str(e):
                 print(f"MPS error during detection: {e}")
                 print("Falling back to CPU for this frame")
                 if track:
-                    results = self.model.track(image, verbose=False, device='cpu', persist=True)
+                    results = self.model.track(image, verbose=False, device='cpu', persist=True, half=False)
                 else:
-                    results = self.model.predict(image, verbose=False, device='cpu')
+                    results = self.model.predict(image, verbose=False, device='cpu', half=False)
             else:
                 # Re-raise the error if not MPS or not an implementation error
                 raise
