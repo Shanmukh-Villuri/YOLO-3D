@@ -47,6 +47,8 @@ def main():
     
     # Feature toggles
     enable_tracking = True  # Enable object tracking
+    if os.environ.get('YOLO3D_TRACK') == '0':
+        enable_tracking = False
     enable_bev = True  # Enable Bird's Eye View visualization
     enable_pseudo_3d = True  # Enable pseudo-3D visualization
     
