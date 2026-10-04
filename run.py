@@ -143,7 +143,7 @@ def main():
     headless = os.environ.get('YOLO3D_HEADLESS', '') == '1'  # skip cv2.imshow
     if os.environ.get('YOLO3D_OUTPUT'):
         output_path = os.environ['YOLO3D_OUTPUT']
-    stage_times = {'detect': 0.0, 'depth': 0.0, 'post': 0.0, 'io': 0.0, 'frame_wall': 0.0}
+    stage_times = {'detect': 0.0, 'depth': 0.0, 'post': 0.0, 'io': 0.0, 'frame_wall': 0.0, 'parallel': 0.0}
     n_timed = 0
     total_start = time.perf_counter()
 
@@ -197,6 +197,7 @@ def main():
             break
             
         try:
+            t_frame = time.perf_counter()
             # Read frame
             ret, frame = cap.read()
             if not ret:
@@ -221,7 +222,7 @@ def main():
                 cached_depth_map, cached_depth_colored = depth_map, depth_colored
             else:
                 depth_map, depth_colored, t_depth = cached_depth_map, cached_depth_colored, 0.0
-            stage_times['frame_wall'] += time.perf_counter() - t0
+            stage_times['parallel'] += time.perf_counter() - t0
 
             t0 = time.perf_counter()
             
@@ -380,6 +381,7 @@ def main():
             stage_times['depth'] += t_depth
             stage_times['post'] += t_post
             stage_times['io'] += t_io
+            stage_times['frame_wall'] += time.perf_counter() - t_frame
             n_timed += 1
             
             # Check for key press again at the end of the loop

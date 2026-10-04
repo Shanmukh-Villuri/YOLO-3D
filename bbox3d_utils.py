@@ -686,7 +686,7 @@ class BirdEyeView:
             # Extract parameters
             class_name = box_3d['class_name'].lower()
             
-            depth = max(box_3d.get('depth_value', 1.0), 0.01)  # already meters            
+            depth = float(min(max(box_3d.get('depth_value', 1.0), 0.01), 80.0))  # meters, clamped for display            
             # Get 2D box dimensions for size estimation
             if 'bbox_2d' in box_3d:
                 x1, y1, x2, y2 = box_3d['bbox_2d']
