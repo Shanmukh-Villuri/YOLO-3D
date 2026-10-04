@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Models auto-downloaded on first run (do NOT push):
+# - YOLO weights via ultralytics YOLO(model_name) in detection_model.py:54
+# - Depth Anything V2 weights via HF pipeline() in depth_model.py:69
+*.pt
+*.pth
+*.onnx
+*.bin
+
+# Local data (do NOT push)
+input/
+output/
+*.mp4
+*.avi
+*.mov
+*.png
+!test_*.png
+
+# Generated logs (do NOT push)
+distances_log.csv
+timestamps.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
