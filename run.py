@@ -7,6 +7,7 @@ import numpy as np
 import torch
 import time
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 
 # Set MPS fallback for operations not supported on Apple Silicon
 if hasattr(torch, 'backends') and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
@@ -32,10 +33,11 @@ def main():
     output_path = "/home/gazebo/src/YOLO-3D/output/kitt_30FPS_1_llo.mp4"  # Path to output video file
     
     # Model settings
-    yolo_model_size = "large"  # YOLOv11 model size: "nano", "small", "medium", "large", "extra"
-    depth_model_size = "large"  # Depth Anything v2 model size: "small", "base", "large"
+    yolo_model_size = "small"  # YOLOv11 model size: "nano", "small", "medium", "large", "extra"
+    depth_model_size = "small"  # Depth Anything v2 model size: "small", "base", "large"
     yolo_model_size = os.environ.get('YOLO3D_YOLO_SIZE', yolo_model_size)
     depth_model_size = os.environ.get('YOLO3D_DEPTH_SIZE', depth_model_size)
+    depth_every = int(os.environ.get('YOLO3D_DEPTH_EVERY', '3'))  # run depth every Nth frame, reuse map in between
     depth_metric = True  # True = real distance in meters
     depth_scene = "outdoor"  # "indoor" or "outdoor" — match your scene
     
@@ -141,9 +143,38 @@ def main():
     headless = os.environ.get('YOLO3D_HEADLESS', '') == '1'  # skip cv2.imshow
     if os.environ.get('YOLO3D_OUTPUT'):
         output_path = os.environ['YOLO3D_OUTPUT']
-    stage_times = {'detect': 0.0, 'depth': 0.0, 'post': 0.0, 'io': 0.0}
+    stage_times = {'detect': 0.0, 'depth': 0.0, 'post': 0.0, 'io': 0.0, 'frame_wall': 0.0}
     n_timed = 0
     total_start = time.perf_counter()
+
+    # Thread pool so detection and depth run in parallel (frame cost ~= max, not sum)
+    executor = ThreadPoolExecutor(max_workers=2)
+    cached_depth_map = None
+    cached_depth_colored = None
+
+    def _detect_job(img):
+        t = time.perf_counter()
+        try:
+            ann, dets = detector.detect(img, track=enable_tracking)
+        except Exception as e:
+            print(f"Error during object detection: {e}")
+            ann, dets = img, []
+            cv2.putText(ann, "Detection Error", (10, 60),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+        return ann, dets, time.perf_counter() - t
+
+    def _depth_job(img):
+        t = time.perf_counter()
+        try:
+            m = depth_estimator.estimate_depth(img)
+            c = depth_estimator.colorize_depth(m)
+        except Exception as e:
+            print(f"Error during depth estimation: {e}")
+            m = np.zeros((height, width), dtype=np.float32)
+            c = np.zeros((height, width, 3), dtype=np.uint8)
+            cv2.putText(c, "Depth Error", (10, 60),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+        return m, c, time.perf_counter() - t
 
 # --- add these 3 lines --- 
     import csv 
@@ -177,30 +208,20 @@ def main():
             depth_frame = frame.copy()
             result_frame = frame.copy()
             
-            # Step 1: Object Detection
+            # Steps 1+2 in parallel: detection runs every frame,
+            # depth runs every Nth frame (cached map reused in between)
             t0 = time.perf_counter()
-            try:
-                detection_frame, detections = detector.detect(detection_frame, track=enable_tracking)
-            except Exception as e:
-                print(f"Error during object detection: {e}")
-                detections = []
-                cv2.putText(detection_frame, "Detection Error", (10, 60), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-            t_detect = time.perf_counter() - t0
-            
-            # Step 2: Depth Estimation
-            t0 = time.perf_counter()
-            try:
-                depth_map = depth_estimator.estimate_depth(original_frame)
-                depth_colored = depth_estimator.colorize_depth(depth_map)
-            except Exception as e:
-                print(f"Error during depth estimation: {e}")
-                # Create a dummy depth map
-                depth_map = np.zeros((height, width), dtype=np.float32)
-                depth_colored = np.zeros((height, width, 3), dtype=np.uint8)
-                cv2.putText(depth_colored, "Depth Error", (10, 60), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-            t_depth = time.perf_counter() - t0
+            fut_det = executor.submit(_detect_job, detection_frame)
+            depth_due = (frame_count % depth_every == 0) or (cached_depth_map is None)
+            fut_depth = executor.submit(_depth_job, original_frame) if depth_due else None
+
+            detection_frame, detections, t_detect = fut_det.result()
+            if fut_depth is not None:
+                depth_map, depth_colored, t_depth = fut_depth.result()
+                cached_depth_map, cached_depth_colored = depth_map, depth_colored
+            else:
+                depth_map, depth_colored, t_depth = cached_depth_map, cached_depth_colored, 0.0
+            stage_times['frame_wall'] += time.perf_counter() - t0
 
             t0 = time.perf_counter()
             
@@ -380,13 +401,13 @@ def main():
     print("Cleaning up resources...")
     total_time = time.perf_counter() - total_start
     if n_timed > 0:
-        avg = {k: v / n_timed * 1000 for k, v in stage_times.items()}
-        avg_frame_ms = sum(avg.values())
+        wall_ms = stage_times['frame_wall'] / n_timed * 1000
+        avg = {k: stage_times[k] / n_timed * 1000 for k in ('detect', 'depth', 'post', 'io')}
         print(f"[SPEED] frames={n_timed} total={total_time:.1f}s "
-              f"avg_fps={n_timed / total_time:.2f} "
-              f"avg_frame={avg_frame_ms:.1f}ms "
-              f"(detect={avg['detect']:.1f}ms depth={avg['depth']:.1f}ms "
+              f"wall_fps={1000 / wall_ms:.2f} avg_frame={wall_ms:.1f}ms "
+              f"(compute detect={avg['detect']:.1f}ms depth={avg['depth']:.1f}ms "
               f"post={avg['post']:.1f}ms io={avg['io']:.1f}ms)")
+    executor.shutdown()
     cap.release()
     out.release()
     cv2.destroyAllWindows()
