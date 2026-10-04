@@ -34,6 +34,8 @@ def main():
     # Model settings
     yolo_model_size = "large"  # YOLOv11 model size: "nano", "small", "medium", "large", "extra"
     depth_model_size = "large"  # Depth Anything v2 model size: "small", "base", "large"
+    yolo_model_size = os.environ.get('YOLO3D_YOLO_SIZE', yolo_model_size)
+    depth_model_size = os.environ.get('YOLO3D_DEPTH_SIZE', depth_model_size)
     depth_metric = True  # True = real distance in meters
     depth_scene = "outdoor"  # "indoor" or "outdoor" — match your scene
     
