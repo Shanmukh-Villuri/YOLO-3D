@@ -111,9 +111,13 @@ class ObjectDetector:
         
         if track:
             # Clean up trajectories for objects that are no longer tracked
+            # (single batched GPU->CPU sync per frame; same IDs as before)
+            seen_ids = set()
+            for predictions in results:
+                if predictions is not None and predictions.boxes is not None and predictions.boxes.id is not None:
+                    seen_ids.update(int(i) for i in predictions.boxes.id.cpu().numpy().reshape(-1))
             for id_ in list(self.tracking_trajectories.keys()):
-                if id_ not in [int(bbox.id) for predictions in results if predictions is not None 
-                              for bbox in predictions.boxes if bbox.id is not None]:
+                if id_ not in seen_ids:
                     del self.tracking_trajectories[id_]
             
             # Process results
@@ -124,58 +128,55 @@ class ObjectDetector:
                 if predictions.boxes is None:
                     continue
                 
-                # Process boxes
-                for bbox in predictions.boxes:
-                    # Extract information
-                    scores = bbox.conf
-                    classes = bbox.cls
-                    bbox_coords = bbox.xyxy
-                    
-                    # Check if tracking IDs are available
-                    if hasattr(bbox, 'id') and bbox.id is not None:
-                        ids = bbox.id
-                    else:
-                        ids = [None] * len(scores)
-                    
-                    # Process each detection
-                    for score, class_id, bbox_coord, id_ in zip(scores, classes, bbox_coords, ids):
-                        xmin, ymin, xmax, ymax = bbox_coord.cpu().numpy()
+                # Process boxes (single batched GPU->CPU sync; identical values)
+                boxes = predictions.boxes
+                xyxy_all = boxes.xyxy.cpu().numpy()
+                conf_all = boxes.conf.cpu().numpy().reshape(-1)
+                cls_all = boxes.cls.cpu().numpy().reshape(-1)
+                if boxes.id is not None:
+                    id_all = boxes.id.cpu().numpy().reshape(-1)
+                else:
+                    id_all = [None] * len(xyxy_all)
+                
+                # Process each detection
+                for bbox_coord, score, class_id, id_ in zip(xyxy_all, conf_all, cls_all, id_all):
+                    xmin, ymin, xmax, ymax = bbox_coord
                         
-                        # Add to detections list
-                        detections.append([
-                            [xmin, ymin, xmax, ymax],  # bbox
-                            float(score),              # confidence score
-                            int(class_id),             # class id
-                            int(id_) if id_ is not None else None  # object id
-                        ])
+                    # Add to detections list
+                    detections.append([
+                        [xmin, ymin, xmax, ymax],  # bbox
+                        float(score),              # confidence score
+                        int(class_id),             # class id
+                        int(id_) if id_ is not None else None  # object id
+                    ])
                         
-                        # Draw bounding box
-                        cv2.rectangle(annotated_image, 
-                                     (int(xmin), int(ymin)), 
-                                     (int(xmax), int(ymax)), 
-                                     (0, 0, 225), 2)
+                    # Draw bounding box
+                    cv2.rectangle(annotated_image, 
+                                 (int(xmin), int(ymin)), 
+                                 (int(xmax), int(ymax)), 
+                                 (0, 0, 225), 2)
                         
-                        # Add label
-                        label = f"ID: {int(id_) if id_ is not None else 'N/A'} {predictions.names[int(class_id)]} {float(score):.2f}"
-                        text_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-                        dim, baseline = text_size[0], text_size[1]
-                        cv2.rectangle(annotated_image, 
-                                     (int(xmin), int(ymin)), 
-                                     (int(xmin) + dim[0], int(ymin) - dim[1] - baseline), 
-                                     (30, 30, 30), cv2.FILLED)
-                        cv2.putText(annotated_image, label, 
-                                   (int(xmin), int(ymin) - 7), 
-                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                    # Add label
+                    label = f"ID: {int(id_) if id_ is not None else 'N/A'} {predictions.names[int(class_id)]} {float(score):.2f}"
+                    text_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+                    dim, baseline = text_size[0], text_size[1]
+                    cv2.rectangle(annotated_image, 
+                                 (int(xmin), int(ymin)), 
+                                 (int(xmin) + dim[0], int(ymin) - dim[1] - baseline), 
+                                 (30, 30, 30), cv2.FILLED)
+                    cv2.putText(annotated_image, label, 
+                               (int(xmin), int(ymin) - 7), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
                         
-                        # Update tracking trajectories
-                        if id_ is not None:
-                            centroid_x = (xmin + xmax) / 2
-                            centroid_y = (ymin + ymax) / 2
+                    # Update tracking trajectories
+                    if id_ is not None:
+                        centroid_x = (xmin + xmax) / 2
+                        centroid_y = (ymin + ymax) / 2
                             
-                            if int(id_) not in self.tracking_trajectories:
-                                self.tracking_trajectories[int(id_)] = deque(maxlen=10)
+                        if int(id_) not in self.tracking_trajectories:
+                            self.tracking_trajectories[int(id_)] = deque(maxlen=10)
                             
-                            self.tracking_trajectories[int(id_)].append((centroid_x, centroid_y))
+                        self.tracking_trajectories[int(id_)].append((centroid_x, centroid_y))
             
             # Draw trajectories
             for id_, trajectory in self.tracking_trajectories.items():
@@ -195,42 +196,41 @@ class ObjectDetector:
                 if predictions.boxes is None:
                     continue
                 
-                # Process boxes
-                for bbox in predictions.boxes:
-                    # Extract information
-                    scores = bbox.conf
-                    classes = bbox.cls
-                    bbox_coords = bbox.xyxy
-                    
-                    # Process each detection
-                    for score, class_id, bbox_coord in zip(scores, classes, bbox_coords):
-                        xmin, ymin, xmax, ymax = bbox_coord.cpu().numpy()
+                # Process boxes (single batched GPU->CPU sync; identical values)
+                boxes = predictions.boxes
+                xyxy_all = boxes.xyxy.cpu().numpy()
+                conf_all = boxes.conf.cpu().numpy().reshape(-1)
+                cls_all = boxes.cls.cpu().numpy().reshape(-1)
+                
+                # Process each detection
+                for bbox_coord, score, class_id in zip(xyxy_all, conf_all, cls_all):
+                    xmin, ymin, xmax, ymax = bbox_coord
                         
-                        # Add to detections list
-                        detections.append([
-                            [xmin, ymin, xmax, ymax],  # bbox
-                            float(score),              # confidence score
-                            int(class_id),             # class id
-                            None                       # object id (None for no tracking)
-                        ])
+                    # Add to detections list
+                    detections.append([
+                        [xmin, ymin, xmax, ymax],  # bbox
+                        float(score),              # confidence score
+                        int(class_id),             # class id
+                        None                       # object id (None for no tracking)
+                    ])
                         
-                        # Draw bounding box
-                        cv2.rectangle(annotated_image, 
-                                     (int(xmin), int(ymin)), 
-                                     (int(xmax), int(ymax)), 
-                                     (0, 0, 225), 2)
+                    # Draw bounding box
+                    cv2.rectangle(annotated_image, 
+                                 (int(xmin), int(ymin)), 
+                                 (int(xmax), int(ymax)), 
+                                 (0, 0, 225), 2)
                         
-                        # Add label
-                        label = f"{predictions.names[int(class_id)]} {float(score):.2f}"
-                        text_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-                        dim, baseline = text_size[0], text_size[1]
-                        cv2.rectangle(annotated_image, 
-                                     (int(xmin), int(ymin)), 
-                                     (int(xmin) + dim[0], int(ymin) - dim[1] - baseline), 
-                                     (30, 30, 30), cv2.FILLED)
-                        cv2.putText(annotated_image, label, 
-                                   (int(xmin), int(ymin) - 7), 
-                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                    # Add label
+                    label = f"{predictions.names[int(class_id)]} {float(score):.2f}"
+                    text_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+                    dim, baseline = text_size[0], text_size[1]
+                    cv2.rectangle(annotated_image, 
+                                 (int(xmin), int(ymin)), 
+                                 (int(xmin) + dim[0], int(ymin) - dim[1] - baseline), 
+                                 (30, 30, 30), cv2.FILLED)
+                    cv2.putText(annotated_image, label, 
+                               (int(xmin), int(ymin) - 7), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         
         return annotated_image, detections
     
