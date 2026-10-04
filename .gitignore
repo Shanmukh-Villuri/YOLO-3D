@@ -13,9 +13,11 @@ venv/
 *.onnx
 *.bin
 
-# Local data (do NOT push)
-input/
-output/
+# Local data (do NOT push contents, keep empty dirs via .gitkeep)
+input/*
+!input/.gitkeep
+output/*
+!output/.gitkeep
 *.mp4
 *.avi
 *.mov
