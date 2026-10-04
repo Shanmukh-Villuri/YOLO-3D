@@ -31,6 +31,8 @@ def main():
     # Input/Output
     source = "/home/gazebo/src/YOLO-3D/input/kiit_ 30FPS.mp4"  # Path to input video file or webcam index (0 for default camera)
     output_path = "/home/gazebo/src/YOLO-3D/output/kitt_30FPS_1_llo.mp4"  # Path to output video file
+    if os.environ.get('YOLO3D_OUTPUT'):
+        output_path = os.environ['YOLO3D_OUTPUT']
     
     # Model settings
     yolo_model_size = "small"  # YOLOv11 model size: "nano", "small", "medium", "large", "extra"
@@ -141,8 +143,6 @@ def main():
     # Timing accumulators for speed benchmarking (whole-setup frame rate)
     max_frames = int(os.environ.get('YOLO3D_MAX_FRAMES', '0'))  # 0 = no limit
     headless = os.environ.get('YOLO3D_HEADLESS', '') == '1'  # skip cv2.imshow
-    if os.environ.get('YOLO3D_OUTPUT'):
-        output_path = os.environ['YOLO3D_OUTPUT']
     stage_times = {'detect': 0.0, 'depth': 0.0, 'post': 0.0, 'io': 0.0, 'frame_wall': 0.0, 'parallel': 0.0}
     n_timed = 0
     total_start = time.perf_counter()
