@@ -132,6 +132,15 @@ def main():
     start_time = time.time()
     fps_display = "FPS: --"
 
+    # Timing accumulators for speed benchmarking (whole-setup frame rate)
+    max_frames = int(os.environ.get('YOLO3D_MAX_FRAMES', '0'))  # 0 = no limit
+    headless = os.environ.get('YOLO3D_HEADLESS', '') == '1'  # skip cv2.imshow
+    if os.environ.get('YOLO3D_OUTPUT'):
+        output_path = os.environ['YOLO3D_OUTPUT']
+    stage_times = {'detect': 0.0, 'depth': 0.0, 'post': 0.0, 'io': 0.0}
+    n_timed = 0
+    total_start = time.perf_counter()
+
 # --- add these 3 lines --- 
     import csv 
     csv_file = open('distances_log.csv', 'w', newline='') 
@@ -143,6 +152,9 @@ def main():
     
     # Main loop
     while True:
+        if max_frames and frame_count >= max_frames:
+            print(f"Reached YOLO3D_MAX_FRAMES={max_frames}, stopping.")
+            break
         # Check for key press at the beginning of each loop
         key = cv2.waitKey(1)
         if key == ord('q') or key == 27 or (key & 0xFF) == ord('q') or (key & 0xFF) == 27:
@@ -162,6 +174,7 @@ def main():
             result_frame = frame.copy()
             
             # Step 1: Object Detection
+            t0 = time.perf_counter()
             try:
                 detection_frame, detections = detector.detect(detection_frame, track=enable_tracking)
             except Exception as e:
@@ -169,8 +182,10 @@ def main():
                 detections = []
                 cv2.putText(detection_frame, "Detection Error", (10, 60), 
                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            t_detect = time.perf_counter() - t0
             
             # Step 2: Depth Estimation
+            t0 = time.perf_counter()
             try:
                 depth_map = depth_estimator.estimate_depth(original_frame)
                 depth_colored = depth_estimator.colorize_depth(depth_map)
@@ -181,6 +196,9 @@ def main():
                 depth_colored = np.zeros((height, width, 3), dtype=np.uint8)
                 cv2.putText(depth_colored, "Depth Error", (10, 60), 
                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            t_depth = time.perf_counter() - t0
+
+            t0 = time.perf_counter()
             
             # Step 3: 3D Bounding Box Estimation
             boxes_3d = []
@@ -320,13 +338,24 @@ def main():
             except Exception as e:
                 print(f"Error adding depth map to result: {e}")
             
+            t_post = time.perf_counter() - t0
+
+            t0 = time.perf_counter()
             # Write frame to output video
             out.write(result_frame)
             
             # Display frames
-            cv2.imshow("3D Object Detection", result_frame)
-            cv2.imshow("Depth Map", depth_colored)
-            cv2.imshow("Object Detection", detection_frame)
+            if not headless:
+                cv2.imshow("3D Object Detection", result_frame)
+                cv2.imshow("Depth Map", depth_colored)
+                cv2.imshow("Object Detection", detection_frame)
+            t_io = time.perf_counter() - t0
+
+            stage_times['detect'] += t_detect
+            stage_times['depth'] += t_depth
+            stage_times['post'] += t_post
+            stage_times['io'] += t_io
+            n_timed += 1
             
             # Check for key press again at the end of the loop
             key = cv2.waitKey(1)
@@ -345,6 +374,15 @@ def main():
     
     # Clean up
     print("Cleaning up resources...")
+    total_time = time.perf_counter() - total_start
+    if n_timed > 0:
+        avg = {k: v / n_timed * 1000 for k, v in stage_times.items()}
+        avg_frame_ms = sum(avg.values())
+        print(f"[SPEED] frames={n_timed} total={total_time:.1f}s "
+              f"avg_fps={n_timed / total_time:.2f} "
+              f"avg_frame={avg_frame_ms:.1f}ms "
+              f"(detect={avg['detect']:.1f}ms depth={avg['depth']:.1f}ms "
+              f"post={avg['post']:.1f}ms io={avg['io']:.1f}ms)")
     cap.release()
     out.release()
     cv2.destroyAllWindows()
