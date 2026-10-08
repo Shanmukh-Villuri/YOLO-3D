@@ -1,12 +1,8 @@
-# YOLO-3D (Metric Depth Fork)
+# YOLO-3D
 
 Real-time 3D object detection combining **YOLOv11** (detection + tracking) with **Depth Anything V2**
 (depth estimation) for pseudo-3D bounding boxes, Bird's Eye View visualization, and per-object
-distance logging.
-
-Forked from [niconielsen32/YOLO-3D](https://github.com/niconielsen32/YOLO-3D).
-Main change vs upstream: depth output is **metric (meters)** instead of relative (0–1), using the
-`Depth-Anything-V2-Metric-Indoor/Outdoor` checkpoints, plus a `distances_log.csv` export.
+distance logging in **meters**.
 
 ## Features
 
@@ -121,6 +117,5 @@ Generated/ignored (never committed): `*.pt` weights, `input/*`, `output/*`,
 
 ## Acknowledgments
 
-- Upstream project: [niconielsen32/YOLO-3D](https://github.com/niconielsen32/YOLO-3D)
 - YOLOv11 by Ultralytics
 - Depth Anything V2
