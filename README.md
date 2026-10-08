@@ -4,6 +4,12 @@ Real-time 3D object detection combining **YOLOv11** (detection + tracking) with 
 (depth estimation) for pseudo-3D bounding boxes, Bird's Eye View visualization, and per-object
 distance logging in **meters**.
 
+## Versions
+
+- `v2` (current): realtime pass — parallel detect+depth, depth every 3rd frame,
+  small-model defaults. Full changelog in the
+  [v2 release](https://github.com/Shanmukh-Villuri/YOLO-3D/releases/tag/v2).
+
 ## Features
 
 - Object detection + tracking with YOLOv11 (`nano`–`extra`)
