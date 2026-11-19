@@ -5,6 +5,7 @@ import cv2
 from ultralytics import YOLO
 from collections import deque
 
+
 class ObjectDetector:
     """
     Object detection using YOLOv11 from Ultralytics
