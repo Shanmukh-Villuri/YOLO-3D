@@ -4,6 +4,7 @@ import json
 # Input video
 input_video = "/home/gazebo/src/YOLO-3D/output/output_metric_venice_lbo.mp4"
 
+
 # Output video
 output_video = "/home/gazebo/src/YOLO-3D/output/output_metric_venice_lbo_trimed.mp4"
 
