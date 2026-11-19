@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
+
 # Set MPS fallback for operations not supported on Apple Silicon
 if hasattr(torch, 'backends') and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
     os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = '1'
