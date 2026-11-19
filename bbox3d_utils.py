@@ -5,6 +5,7 @@ from filterpy.kalman import KalmanFilter
 from collections import defaultdict
 import math
 
+
 # Default camera intrinsic matrix (can be overridden)
 DEFAULT_K = np.array([
     [718.856, 0.0, 607.1928],
