@@ -7,6 +7,7 @@ import cv2
 from transformers import pipeline
 from PIL import Image
 
+
 class DepthEstimator:
     """
     Depth estimation using Depth Anything v2
